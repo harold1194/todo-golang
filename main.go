@@ -20,8 +20,101 @@ type User struct {
 	Password *string `json:"password"`
 }
 
+type Attendance struct {
+	FullName  *string `json:"fullname"`
+	Address   *string `json:"address"`
+	Degree    *string `json:"degree"`
+	Year      *string `json:"year"`
+	Block     *string `json:"block"`
+	Subject   *string `json:"subject"`
+	Date      *string `json:"date"`
+	StartTime *string `json:"startTime"`
+	EndTime   *string `json:"endTime"`
+}
+
 type Repository struct {
 	DB *gorm.DB
+}
+
+func (r *Repository) CreateAttendance(context *fiber.Ctx) error {
+	attendance := Attendance{}
+
+	err := context.BodyParser(&attendance)
+
+	if err != nil {
+		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{"message": "request failed"})
+		return err
+	}
+
+	err = r.DB.Create(attendance).Error
+	if err != nil {
+		context.Status(http.StatusBadRequest).JSON(
+			&fiber.Map{"message": "could not create attendance"})
+		return nil
+	}
+
+	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "attendance has added"})
+	return nil
+}
+
+func (r *Repository) DeleteAttendance(context *fiber.Ctx) error {
+	attendaceModel := models.Attendance{}
+	id := context.Params("id")
+	if id == "" {
+		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{"message": "id cannot be empty"})
+		return nil
+	}
+
+	err := r.DB.Delete(attendaceModel, id)
+
+	if err.Error != nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not delete attendance"})
+		return nil
+	}
+	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "Attendance Deleted."})
+	return nil
+}
+
+func (r *Repository) GetAttendance(context *fiber.Ctx) error {
+	attendanceModel := &[]models.Attendance{}
+
+	err := r.DB.Find(attendanceModel).Error
+	if err != nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{
+			"message": "could not get attendance data",
+		})
+		return nil
+	}
+	context.Status(http.StatusOK).JSON(
+		&fiber.Map{"message": "student successfully fetch", "data": attendanceModel},
+	)
+	return nil
+}
+
+func (r *Repository) GetAttendanceByID(context *fiber.Ctx) error {
+	id := context.Params("id")
+	attendaceModel := &models.Attendance{}
+	if id == "" {
+		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "id cannot found",
+		})
+		return nil
+	}
+
+	fmt.Println("the ID is", id)
+
+	err := r.DB.Where("id = ?", id).First(attendaceModel).Error
+	if err != nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{
+			"message": "could not get attendance",
+		})
+		return err
+	}
+	context.Status(http.StatusOK).JSON(&fiber.Map{
+		"message": "attendance id fetched successfully",
+		"data":    attendaceModel,
+	})
+	return nil
 }
 
 func (r *Repository) Register(context *fiber.Ctx) error {
@@ -174,6 +267,12 @@ func (r *Repository) SetupRoutes(app *fiber.App) {
 	api.Delete("delete_user/:id", r.DeleteUser)
 	api.Get("/get_users/:id", r.GetUserByID)
 	api.Get("/users", r.GetUsers)
+
+	// attendance
+	api.Post("/create_attendance", r.CreateAttendance)
+	api.Delete("delete_attendance/:id", r.DeleteAttendance)
+	api.Get("/get_attendance/:id", r.GetAttendanceByID)
+	api.Get("/attendance", r.GetAttendance)
 }
 
 func main() {
@@ -196,6 +295,15 @@ func main() {
 		log.Fatal("could not load the database")
 	}
 	err = models.MigrateUsers(db)
+	if err != nil {
+		log.Fatal("could not migrate db")
+	}
+
+	// attendance
+	if err != nil {
+		log.Fatal("could not load the database")
+	}
+	err = models.MigrateAttendance(db)
 	if err != nil {
 		log.Fatal("could not migrate db")
 	}
